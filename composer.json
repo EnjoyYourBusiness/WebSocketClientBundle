@@ -1,5 +1,5 @@
 {
-    "name": "EnjoyYourBusiness/websocketclienbundle",
+    "name": "EnjoyYourBusiness/websocketclientbundle",
     "license": "MIT",
     "type": "symfony-bundle",
     "description": "Mechanics for a php websocket client",
