@@ -1,0 +1,29 @@
+{
+    "name": "EnjoyYourBusiness/websocketclienbundle",
+    "license": "MIT",
+    "type": "symfony-bundle",
+    "description": "Mechanics for a php websocket client",
+    "authors": [
+        {
+            "name": "Enjoy Your Business",
+            "email": "dev@enjoyyourbusiness.fr",
+            "homepage": "https://www.enjoyyourbusiness.fr/"
+        }
+    ],
+    "autoload": {
+        "psr-4": { "EnjoyYourBusiness\\WebSocketClientBundle\\": "" }
+    },
+    "require": {
+        "php": "~7.1",
+        "symfony/symfony": ">=3",
+        "incenteev/composer-parameter-handler": "~2.0"
+    },
+    "require-dev": {
+        "sensio/generator-bundle": "~2.3"
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-master": "master"
+        }
+    }
+}
