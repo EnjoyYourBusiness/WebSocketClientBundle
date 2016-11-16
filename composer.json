@@ -15,8 +15,9 @@
     },
     "require": {
         "php": "~7.1",
-        "symfony/symfony": ">=3",
-        "incenteev/composer-parameter-handler": "~2.0"
+        "symfony/symfony": "~3",
+        "incenteev/composer-parameter-handler": "~2.0",
+        "cboden/ratchet": "^0.3"
     },
     "require-dev": {
         "sensio/generator-bundle": "~2.3"

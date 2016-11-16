@@ -1,0 +1,3 @@
+eyb_web_socket_homepage:
+    path:     /hello/{name}
+    defaults: { _controller: EybWebSocketBundle:Default:index }
