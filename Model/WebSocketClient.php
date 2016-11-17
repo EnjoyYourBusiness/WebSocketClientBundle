@@ -6,20 +6,19 @@
  * Copyright 2014 Enjoy Your Business - RCS Bourges B 800 159 295 ©
  */
 
-namespace EnjoyYourBusiness\WebSocketBundle\Component;
+namespace EnjoyYourBusiness\WebSocketClientBundle\Model;
 
-use EnjoyYourBusiness\WebSocketBundle\Exception\Handshake\InvalidAcceptKeyException;
-use EnjoyYourBusiness\WebSocketBundle\Exception\Handshake\NoHeadersException;
-use EnjoyYourBusiness\WebSocketBundle\Exception\WebsocketHandShakeException;
-use EnjoyYourBusiness\WebSocketBundle\Exception\WebsocketMessageException;
-use EnjoyYourBusiness\WebSocketBundle\Exception\WebsocketOpenException;
-use Monolog\Handler\StreamHandler;
+use EnjoyYourBusiness\WebSocketClientBundle\Exception\Handshake\InvalidAcceptKeyException;
+use EnjoyYourBusiness\WebSocketClientBundle\Exception\Handshake\NoHeadersException;
+use EnjoyYourBusiness\WebSocketClientBundle\Exception\WebsocketHandShakeException;
+use EnjoyYourBusiness\WebSocketClientBundle\Exception\WebsocketMessageException;
+use EnjoyYourBusiness\WebSocketClientBundle\Exception\WebsocketOpenException;
 use Monolog\Logger;
 
 /**
  * Class WebSocketClient
  *
- * @package   EnjoyYourBusiness\WebSocketBundle\Component
+ * @package   EnjoyYourBusiness\WebSocketClientBundle\Component
  *
  * @author    Emmanuel Derrien <emmanuel.derrien@enjoyyourbusiness.fr>
  * @author    Anthony Maudry <anthony.maudry@enjoyyourbusiness.fr>
@@ -32,44 +31,88 @@ final class WebSocketClient
 {
     const PUSH_CLIENT_NAME = 'push client';
     const SOCKET_URL_FORMAT = 'tcp://%s:%d';
-    const EVENT_ACTION = 'EybHomeBundle:WebSocketEvents:trigger';
     const MESSAGE_HANDSHAKE = 'handshake';
     const MESSAGE_WRAP = "\x00%s\xff";
     const ACCEPT_KEY_REGEXP = '#Sec-WebSocket-Accept:\s(.*)$#mU';
     const ACCEPT_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+    const URL_REGEXP = '#^(?<protocole>\w+://)?(?<url>[^/]+)(?<uri>/.*)?$#';
+
+
     /**
      * @var boolean
      */
     private $opened;
+    /**
+     * @var resource
+     */
     private $socket;
+    /**
+     * @var string
+     */
     private $receivedHeaders;
+    /**
+     * @var string
+     */
     private $receivedData;
+    /**
+     * @var Logger
+     */
     private $logger;
+    /**
+     * @var string
+     */
     private $key;
+    /**
+     * @var string
+     */
+    private $host;
+    /**
+     * @var int
+     */
+    private $port;
 
     /**
-     * Gets the instance of Client
-     *
-     * @return WebSocketClient
+     * @var string
      */
-    public static function getInstance()
-    {
-        static $instance = null;
+    private $uri;
 
-        if (!($instance instanceof WebSocketClient)) {
-            $instance = new self();
-        }
+    /**
+     * @var bool
+     */
+    private $ssl;
 
-        return $instance;
-    }
+    /**
+     * @var string
+     */
+    private $clientIp;
 
     /**
      * WebSocketClient constructor.
+     *
+     * @param string $host
+     * @param int    $port
+     * @param string $clientIp
+     * @param Logger $logger
      */
-    private function __construct()
+    public function __construct(string $host, int $port, string $clientIp, Logger $logger = null)
     {
-        $this->logger = new Logger('websocket_client');
-        $this->logger->pushHandler(new StreamHandler(ROOT_DIR . '/app/logs/websocket.client.log', Logger::DEBUG));
+        $matches = [];
+        preg_match(self::URL_REGEXP, $host, $matches);
+        $this->logger = $logger;
+        $this->host = $matches['url'];
+        $this->port = $port;
+        $this->uri = !empty($matches['uri']) ? $matches['uri'] : '/';
+        $this->ssl = ($matches['protocole'] === 'wss://');
+        $this->clientIp = $clientIp;
+
+        $this->getLogger() and $this->getLogger()->addInfo('Create websocket with configuration : ', [
+            'provided host' => $host,
+            'matches' => $matches,
+            'host' => $this->host,
+            'port' => $this->port,
+            'uri' => $this->uri,
+            'ssl' => $this->ssl
+        ]);
     }
 
     /**
@@ -88,7 +131,7 @@ final class WebSocketClient
     private function getKey()
     {
         if (!$this->key) {
-            $this->key = trim(base64_encode(StringHelper::random(16, StringHelper::RANDOM_ALLOWED_ALPHANUMERIC | StringHelper::RANDOM_ALLOWED_SPECIALCHARS)));
+            $this->key = trim(bin2hex(random_bytes(8)));
         }
 
         return $this->key;
@@ -101,7 +144,7 @@ final class WebSocketClient
      */
     private function getExpectedServerAcceptKey()
     {
-        $concatenated = trim($this->getKey() . self::ACCEPT_GUID);
+        $concatenated = trim(base64_encode($this->getKey()) . self::ACCEPT_GUID);
 
         $sha1 = pack('H*', sha1($concatenated));
 
@@ -116,7 +159,7 @@ final class WebSocketClient
     private function getHandshakeHeaders()
     {
         $protocols = ['chat', 'superchat'];
-        $headFormat = "GET / HTTP/1.1" . "\r\n" .
+        $headFormat = "GET %s HTTP/1.1" . "\r\n" .
             "Upgrade: websocket" . "\r\n" .
             "Connection: Upgrade" . "\r\n" .
             "Origin: %s" . "\r\n" .
@@ -127,11 +170,12 @@ final class WebSocketClient
 
         return sprintf(
             $headFormat,
-            'localhost', // Origin
-            Application::getInstance()->getUrl(), // Host (1)
-            Application::getInstance()->getSocketPort(), // Host (2)
+            $this->uri,
+            $this->clientIp, // Origin
+            $this->host, // Host (1)
+            $this->port, // Host (2)
             implode(', ', $protocols), // Protocol
-            $this->getKey() // Key
+            base64_encode($this->getKey()) // Key
         );
     }
 
@@ -155,24 +199,35 @@ final class WebSocketClient
      * Validates the handshake response
      *
      * @return bool
+     *
+     * @throws InvalidAcceptKeyException
+     * @throws NoHeadersException
+     * @throws \Exception
      */
     private function validateHandshake()
     {
         $headers = $this->getLastReceivedHeaders();
 
         if (!$headers) {
-            $this->getLogger()->addCritical(NoHeadersException::MESSAGE);
+            $this->getLogger() and $this->getLogger()->addCritical(NoHeadersException::MESSAGE);
             throw new NoHeadersException();
         }
 
         $matches = [];
 
+        $this->getLogger() and $this->getLogger()->addInfo('Received Headers for handshake : ' . $headers);
+
         preg_match(self::ACCEPT_KEY_REGEXP, $headers, $matches);
 
-        $receivedKey = trim($matches[1]);
+        if (count($matches) > 1) {
+            $receivedKey = trim($matches[1]);
+        } else {
+            throw new \Exception('Did not get an accept key from handshake');
+        }
 
         if ($receivedKey !== $this->getExpectedServerAcceptKey()) {
-            $this->getLogger()->addCritical(sprintf(InvalidAcceptKeyException::MESSAGE_FORMAT, $this->getExpectedServerAcceptKey(), $receivedKey));
+            $this->getLogger() and $this->getLogger()->addCritical(sprintf(InvalidAcceptKeyException::MESSAGE_FORMAT, $this->getExpectedServerAcceptKey(), $receivedKey));
+
             throw new InvalidAcceptKeyException($this->getExpectedServerAcceptKey(), $receivedKey);
         }
 
@@ -183,26 +238,38 @@ final class WebSocketClient
      * Opens a socket
      *
      * @return bool
+     * @throws WebsocketOpenException
      */
     public function open()
     {
-        $this->getLogger()->addInfo('Opening websocket connection');
-        $host = 'localhost';  //where is the websocket server
-        $port = Application::getInstance()->getSocketPort();
+        $host = $this->host;
+        $port = $this->port;
         $errno = 0;
         $errstr = '';
+
+        if ($this->ssl) {
+            $host = 'ssl://' . $host;
+        }
+
+        $this->getLogger() and $this->getLogger()->addInfo(sprintf('Opening websocket connection : %s:%d', $host, $port));
+
+
+
+//        $context = stream_context_create();
+//        stream_context_set_option($context, "ssl", "allow_self_signed", true);
+//        stream_context_set_option($context, "ssl", "verify_peer", false);
 
         $this->socket = fsockopen($host, $port, $errno, $errstr, 2);
 
         if (!is_resource($this->socket) or $errno > 0) {
-            $this->getLogger()->addCritical(WebsocketOpenException::MESSAGE);
+            $this->getLogger() and $this->getLogger()->addCritical(WebsocketOpenException::MESSAGE);
             throw new WebsocketOpenException($errno, $errstr);
         }
 
-        $this->getLogger()->addInfo('Websocket oppened');
+        $this->getLogger() and $this->getLogger()->addInfo('Websocket oppened');
 
         $this->handshake();
-        $this->getLogger()->addInfo('Handshake received');
+        $this->getLogger() and $this->getLogger()->addInfo('Handshake received');
 
         return true;
     }
@@ -216,18 +283,17 @@ final class WebSocketClient
      */
     private function handshake()
     {
-
-        $this->getLogger()->addInfo('Sending handshake', [$this->getHandshakeHeaders()]);
+        $this->getLogger() and $this->getLogger()->addInfo('Sending handshake', [$this->getHandshakeHeaders()]);
         $writeHeadersResult = fwrite($this->getSocket(), $this->getHandshakeHeaders());
         if (!$writeHeadersResult) {
-            $this->getLogger()->addCritical(WebsocketHandShakeException::MESSAGE);
+            $this->getLogger() and $this->getLogger()->addCritical(WebsocketHandShakeException::MESSAGE);
             throw new WebsocketHandShakeException();
         }
         $this->receivedHeaders = fread($this->getSocket(), 2000);
 
         $this->validateHandshake();
 
-        $this->getLogger()->addInfo('handshake done');
+        $this->getLogger() and $this->getLogger()->addInfo('handshake done');
 
         return true;
     }
@@ -237,7 +303,7 @@ final class WebSocketClient
      */
     private function close()
     {
-        $this->getLogger()->addInfo('closing websocket');
+        $this->getLogger() and $this->getLogger()->addInfo('closing websocket');
         $this->opened and fclose($this->getSocket());
         $this->opened = false;
 
@@ -248,8 +314,10 @@ final class WebSocketClient
      * Sends a message
      *
      * @param mixed $message
+     * @param bool  $waitResponse
      *
      * @return string
+     * @throws WebsocketMessageException
      */
     public function send($message, $waitResponse = false)
     {
@@ -258,53 +326,27 @@ final class WebSocketClient
         } elseif (is_scalar($message)) {
             $toSend = (string) $message;
         } else {
-            $this->getLogger()->addCritical('A websocket message should be a scalar or a json serializable');
+            $this->getLogger() and $this->getLogger()->addCritical('A websocket message should be a scalar or a json serializable');
             throw new \InvalidArgumentException('A websocket message should be a scalar or a json serializable');
         }
 
         $socket = $this->getSocket();
 
-        $this->getLogger()->addInfo('Writing message body', ['message' => $toSend]);
+        $this->getLogger() and $this->getLogger()->addInfo('Writing message body', ['message' => $toSend]);
         $writeMessageResult = fwrite($socket, $this->hybi10Encode($toSend));
         if (!$writeMessageResult) {
-            $this->getLogger()->addCritical(WebsocketMessageException::MESSAGE_BODY_ERROR);
+            $this->getLogger() and $this->getLogger()->addCritical(WebsocketMessageException::MESSAGE_BODY_ERROR);
             throw new WebsocketMessageException(WebsocketMessageException::MESSAGE_BODY_ERROR);
         }
         if ($waitResponse) {
-            $this->getLogger()->addInfo('Reading response');
-            $buffer = fread($this->getSocket(), 2000);// drop?
-            $this->getLogger()->addInfo('Read message body response', [$buffer]);
+            $this->getLogger() and $this->getLogger()->addInfo('Reading response');
+            $buffer = fread($this->getSocket(), 2000);
+            $this->getLogger() and $this->getLogger()->addInfo('Read message body response', [$buffer]);
 
             return $buffer;
         }
 
         return '';
-    }
-
-    /**
-     * Sends an event
-     *
-     * @param string $event
-     * @param array  $data
-     *
-     * @return string
-     */
-    public function sendEvent($event, array $data = array(), $waitResponse = false, $userId = null)
-    {
-        $this->getLogger()->addDebug('Event sending', ['event' => $event, 'data' => $data]);
-
-        $messageData = [
-            'action' => self::EVENT_ACTION,
-            'toUser' => $userId,
-            'data'   => [
-                'event' => $event,
-                'data' => $data
-            ]
-        ];
-
-        $this->getLogger()->addDebug('message data', ['data' => $messageData]);
-
-        return $this->send($messageData, $waitResponse);
     }
 
     /**

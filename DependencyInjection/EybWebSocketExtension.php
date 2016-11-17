@@ -1,6 +1,6 @@
 <?php
 
-namespace EnjoyYourBusiness\WebSocketBundle\DependencyInjection;
+namespace EnjoyYourBusiness\WebSocketClientBundle\DependencyInjection;
 
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\Config\FileLocator;

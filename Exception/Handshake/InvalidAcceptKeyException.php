@@ -6,13 +6,13 @@
  * Copyright 2014 Enjoy Your Business - RCS Bourges B 800 159 295 ©
  */
 
-namespace EnjoyYourBusiness\WebSocketBundle\Exception\Handshake;
+namespace EnjoyYourBusiness\WebSocketClientBundle\Exception\Handshake;
 
 
 /**
  * Class InvalidAcceptKeyException
  *
- * @package   EnjoyYourBusiness\WebSocketBundle\Exception\Handshake
+ * @package   EnjoyYourBusiness\WebSocketClientBundle\Exception\Handshake
  *
  * @author    Emmanuel Derrien <emmanuel.derrien@enjoyyourbusiness.fr>
  * @author    Anthony Maudry <anthony.maudry@enjoyyourbusiness.fr>

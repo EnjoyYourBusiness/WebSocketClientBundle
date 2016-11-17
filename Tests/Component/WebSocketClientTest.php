@@ -6,16 +6,16 @@
  * Copyright 2014 Enjoy Your Business - RCS Bourges B 800 159 295 ©
  */
 
-namespace EnjoyYourBusiness\WebSocketBundle\Tests\Component;
+namespace EnjoyYourBusiness\WebSocketClientBundle\Tests\Component;
 
 
 use Eyb\BaseBundle\Tests\AbstractTestCase;
-use EnjoyYourBusiness\WebSocketBundle\Component\WebSocketClient;
+use EnjoyYourBusiness\WebSocketClientBundle\Component\WebSocketClient;
 
 /**
  * Class WebSocketClientTest
  *
- * @package   EnjoyYourBusiness\WebSocketBundle\Tests\Component
+ * @package   EnjoyYourBusiness\WebSocketClientBundle\Tests\Component
  *
  * @author    Emmanuel Derrien <emmanuel.derrien@enjoyyourbusiness.fr>
  * @author    Anthony Maudry <anthony.maudry@enjoyyourbusiness.fr>
