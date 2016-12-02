@@ -87,14 +87,20 @@ final class WebSocketClient
     private $clientIp;
 
     /**
+     * @var array
+     */
+    private $headers;
+
+    /**
      * WebSocketClient constructor.
      *
      * @param string $host
      * @param int    $port
      * @param string $clientIp
+     * @param array  $headers
      * @param Logger $logger
      */
-    public function __construct(string $host, int $port, string $clientIp, Logger $logger = null)
+    public function __construct(string $host, int $port, string $clientIp, array $headers = [], Logger $logger = null)
     {
         $matches = [];
         preg_match(self::URL_REGEXP, $host, $matches);
@@ -104,14 +110,15 @@ final class WebSocketClient
         $this->uri = !empty($matches['uri']) ? $matches['uri'] : '/';
         $this->ssl = ($matches['protocole'] === 'wss://');
         $this->clientIp = $clientIp;
+        $this->headers = $headers;
 
         $this->getLogger() and $this->getLogger()->addInfo('Create websocket with configuration : ', [
             'provided host' => $host,
-            'matches' => $matches,
-            'host' => $this->host,
-            'port' => $this->port,
-            'uri' => $this->uri,
-            'ssl' => $this->ssl
+            'matches'       => $matches,
+            'host'          => $this->host,
+            'port'          => $this->port,
+            'uri'           => $this->uri,
+            'ssl'           => $this->ssl
         ]);
     }
 
@@ -159,24 +166,27 @@ final class WebSocketClient
     private function getHandshakeHeaders()
     {
         $protocols = ['chat', 'superchat'];
-        $headFormat = "GET %s HTTP/1.1" . "\r\n" .
-            "Upgrade: websocket" . "\r\n" .
-            "Connection: Upgrade" . "\r\n" .
-            "Origin: %s" . "\r\n" .
-            "Host: %s:%d" . "\r\n" .
-            "Sec-WebSocket-Version: 13" . "\r\n" .
-            "Sec-WebSocket-Protocol: %s" . "\r\n" .
-            "Sec-WebSocket-Key: %s" . "\r\n" . "\r\n";
 
-        return sprintf(
-            $headFormat,
-            $this->uri,
-            $this->clientIp, // Origin
-            $this->host, // Host (1)
-            $this->port, // Host (2)
-            implode(', ', $protocols), // Protocol
-            base64_encode($this->getKey()) // Key
-        );
+        $headersList = array_merge([
+            'Upgrade'                => 'websocket',
+            'Connection'             => 'Upgrade',
+            'Origin'                 => $this->clientIp,
+            'Host'                   => sprintf('%s:%d', $this->host, $this->port),
+            'X-Enjoy-Application'    => 'anthony',
+            'Sec-WebSocket-Version'  => '13',
+            'Sec-WebSocket-Protocol' => implode(', ', $protocols),
+            'Sec-WebSocket-Key'      => base64_encode($this->getKey()),
+        ], $this->headers);
+
+        $headers = sprintf("GET %s HTTP/1.1" . "\r\n", $this->uri);
+
+        foreach ($headersList as $key => $value) {
+            $headers .= sprintf('%s: %s' . "\r\n", $key, $value);
+        }
+
+        $headers .= "\r\n";
+
+        return $headers;
     }
 
     /**
@@ -252,12 +262,6 @@ final class WebSocketClient
         }
 
         $this->getLogger() and $this->getLogger()->addInfo(sprintf('Opening websocket connection : %s:%d', $host, $port));
-
-
-
-//        $context = stream_context_create();
-//        stream_context_set_option($context, "ssl", "allow_self_signed", true);
-//        stream_context_set_option($context, "ssl", "verify_peer", false);
 
         $this->socket = fsockopen($host, $port, $errno, $errstr, 2);
 
@@ -339,11 +343,14 @@ final class WebSocketClient
             throw new WebsocketMessageException(WebsocketMessageException::MESSAGE_BODY_ERROR);
         }
         if ($waitResponse) {
+            $response = '';
             $this->getLogger() and $this->getLogger()->addInfo('Reading response');
-            $buffer = fread($this->getSocket(), 2000);
+            while($buffer = fread($this->getSocket(), 2000)) {
+                $response .= $buffer;
+            }
             $this->getLogger() and $this->getLogger()->addInfo('Read message body response', [$buffer]);
 
-            return $buffer;
+            return $this->hybi10Decode($response);
         }
 
         return '';
