@@ -7,6 +7,7 @@
  */
 
 namespace EnjoyYourBusiness\WebSocketClientBundle\Model;
+use Monolog\Logger;
 
 
 /**
@@ -24,6 +25,35 @@ namespace EnjoyYourBusiness\WebSocketClientBundle\Model;
  */
 class SocketIOClient extends WebSocketClient
 {
+    const SEND_PROBE_MESSAGE = '2probe';
+    const RECEIVED_PROBE_MESSAGE = '3probe';
+    const SEND_ACKNOWLEDGEMENT = '5';
+    const EIO = '3';
+    const TRANSPORT = 'websocket';
+
+    public function __construct($host, $port, $clientIp, array $headers = [], Logger $logger = null)
+    {
+        $params = ['EIO' => self::EIO, 'transport' => self::TRANSPORT];
+
+        $newHost = $host;
+
+        if (strpos($host, '?') === false) {
+            $newHost .= '?';
+        } else {
+            $newHost.= '&';
+        }
+
+        $paramsStr = [];
+
+        foreach ($params as $key => $value) {
+            $paramsStr[] = sprintf('%s=%s', $key, urlencode($value));
+        }
+
+        $newHost .= implode('&', $paramsStr);
+
+        parent::__construct($newHost, $port, $clientIp, $headers, $logger);
+    }
+
     /**
      * {@inheritdoc}
      */
@@ -33,14 +63,14 @@ class SocketIOClient extends WebSocketClient
 
         if ($res) {
             $this->getLogger() and $this->getLogger()->addInfo('Sending probe');
-            $probResponse = $this->sendRaw('2probe', true);
+            $probResponse = $this->sendRaw(self::SEND_PROBE_MESSAGE, true);
 
-            if ($probResponse === '3probe') {
+            if (is_array($probResponse)) {
                 $this->getLogger() and $this->getLogger()->addInfo('Got response probe');
-                $this->sendRaw('5');
-                $this->getLogger() and $this->getLogger()->addInfo('Got response probe');
+                $this->sendRaw(self::SEND_ACKNOWLEDGEMENT);
+                $this->getLogger() and $this->getLogger()->addInfo('Sent acknowledgment');
             } else {
-                $this->getLogger() and $this->getLogger()->addInfo('Got wrong response probe', [$probResponse]);
+                $this->getLogger() and $this->getLogger()->addInfo('Got wrong response probe');
                 return false;
             }
         }
