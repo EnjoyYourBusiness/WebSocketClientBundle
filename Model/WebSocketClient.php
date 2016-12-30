@@ -27,7 +27,7 @@ use Monolog\Logger;
  * @author    Lucien Bruneau <lucien.bruneau@enjoyyourbusiness.fr>
  * @copyright 2014 Enjoy Your Business - RCS Bourges B 800 159 295 ©
  */
-final class WebSocketClient
+class WebSocketClient
 {
     const PUSH_CLIENT_NAME = 'push client';
     const SOCKET_URL_FORMAT = 'tcp://%s:%d';
@@ -125,7 +125,7 @@ final class WebSocketClient
     /**
      * @return Logger
      */
-    private function getLogger()
+    protected function getLogger()
     {
         return $this->logger;
     }
@@ -343,14 +343,13 @@ final class WebSocketClient
             throw new WebsocketMessageException(WebsocketMessageException::MESSAGE_BODY_ERROR);
         }
         if ($waitResponse) {
-            $response = '';
             $this->getLogger() and $this->getLogger()->addInfo('Reading response');
-            while($buffer = fread($this->getSocket(), 2000)) {
-                $response .= $buffer;
-            }
-            $this->getLogger() and $this->getLogger()->addInfo('Read message body response', [$buffer]);
+            $buffer = fread($this->getSocket(), 2000);
+            $this->getLogger() and $this->getLogger()->addInfo('Reading buffer', [$buffer]);
+            $response = $this->hybi10Decode($buffer);
+            $this->getLogger() and $this->getLogger()->addInfo('Read message body response');
 
-            return $this->hybi10Decode($response);
+            return $response;
         }
 
         return '';
