@@ -7,6 +7,8 @@
  */
 
 namespace EnjoyYourBusiness\WebSocketClientBundle\Model;
+
+use EnjoyYourBusiness\WebSocketClientBundle\Model\SocketIO\ProbeResponse;
 use Monolog\Logger;
 
 
@@ -30,6 +32,11 @@ class SocketIOClient extends WebSocketClient
     const SEND_ACKNOWLEDGEMENT = '5';
     const EIO = '3';
     const TRANSPORT = 'websocket';
+
+    /**
+     * @var ProbeResponse
+     */
+    private $payload;
 
     public function __construct($host, $port, $clientIp, array $headers = [], Logger $logger = null)
     {
@@ -66,6 +73,7 @@ class SocketIOClient extends WebSocketClient
             $probResponse = $this->sendRaw(self::SEND_PROBE_MESSAGE, true);
 
             if (is_array($probResponse)) {
+                $this->payload = new ProbeResponse($probResponse);
                 $this->getLogger() and $this->getLogger()->addInfo('Got response probe');
                 $this->sendRaw(self::SEND_ACKNOWLEDGEMENT);
                 $this->getLogger() and $this->getLogger()->addInfo('Sent acknowledgment');

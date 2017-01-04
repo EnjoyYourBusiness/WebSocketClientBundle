@@ -342,17 +342,23 @@ class WebSocketClient
             $this->getLogger() and $this->getLogger()->addCritical(WebsocketMessageException::MESSAGE_BODY_ERROR);
             throw new WebsocketMessageException(WebsocketMessageException::MESSAGE_BODY_ERROR);
         }
-        if ($waitResponse) {
+        while ($waitResponse) {
             $this->getLogger() and $this->getLogger()->addInfo('Reading response');
             $buffer = fread($this->getSocket(), 2000);
             $this->getLogger() and $this->getLogger()->addInfo('Reading buffer', [$buffer]);
             $response = $this->hybi10Decode($buffer);
             $this->getLogger() and $this->getLogger()->addInfo('Read message body response');
 
-            return $response;
+            if ($response) {
+                return $response;
+            }
         }
 
         return '';
+    }
+
+    public function listen(\Closure $closure)
+    {
     }
 
     /**
